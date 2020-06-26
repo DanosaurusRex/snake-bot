@@ -62,10 +62,11 @@ class Segment(Sprite):
 
 class Snake():
     """Class to manage the snake."""
-    def __init__(self, screen, x, y, color=(0,255,0), length=3):
+    def __init__(self, screen, x, y, color=(0,255,0), length=5):
         self.screen = screen
         self.xdir = 1
         self.ydir = 0
+        self.direction = 2 # 1U, 2R, 3D, 4L
         self.body = []
         self.color = color
         for i in range(length):
@@ -74,7 +75,7 @@ class Snake():
         self.tail = Group(self.body[1:])
         self.score = 0
         self.foods = Group()
-        self.life = 500
+        self.life = 200
 
     def __iter__(self):
         for segment in self.body:
@@ -98,19 +99,41 @@ class Snake():
                 segment.y = self.body[pos-1].y
             segment.update()
 
-    def move(self, dir):
-        if dir == 'left' and not self.xdir:
+    def move_left(self):
+        if self.direction == 1:
             self.xdir = -1
             self.ydir = 0
-        if dir == 'right' and not self.xdir:
-            self.xdir = 1
-            self.ydir = 0
-        if dir == 'up' and not self.ydir:
-            self.xdir = 0
-            self.ydir = -1
-        if dir == 'down' and not self.ydir:
+            self.direction = 4
+        elif self.direction == 4:
             self.xdir = 0
             self.ydir = 1
+            self.direction = 3
+        elif self.direction == 3:
+            self.xdir = 1
+            self.ydir = 0
+            self.direction = 2
+        elif self.direction == 2:
+            self.xdir = 0
+            self.ydir = -1
+            self.direction = 1
+
+    def move_right(self):
+        if self.direction == 1:
+            self.xdir = 1
+            self.ydir = 0
+            self.direction = 2
+        elif self.direction == 2:
+            self.xdir = 0
+            self.ydir = 1
+            self.direction = 3
+        elif self.direction == 3:
+            self.xdir = -1
+            self.ydir = 0
+            self.direction = 4
+        elif self.direction == 4:
+            self.xdir = 0
+            self.ydir = -1
+            self.direction = 1
 
     def grow(self):
         new = Segment(self.screen, self.body[-1].x, self.body[-1].y, self.color)
@@ -202,7 +225,7 @@ def fitness(genomes, config):
         ge.append(g)
 
     while True:
-        clock.tick(30)
+        clock.tick(20)
         check_events()
 
         for i, snake in enumerate(snakes):
@@ -212,24 +235,17 @@ def fitness(genomes, config):
 
             headx, heady = snake.head.x, snake.head.y
             foodx, foody = snake.food_position()
-            distance = abs(headx - foodx) + abs(heady - foody)
-            xdir = snake.xdir
-            ydir = snake.ydir
-            output = nets[i].activate((headx, heady, distance))
-            # len(snake), xdir, ydir
+            distancex = headx - foodx
+            distancey = heady - foody
+            direction = snake.direction
+            output = nets[i].activate((headx, heady, distancex, distancey, len(snake), direction))
+            # 
 
-            if output[0] > 0.5 and output[1] <= 0.0:
-                snake.move('up')
-                ge[i].fitness += 0.1
-            if output[1] > 0.5 and output[0] <= 0.0:
-                snake.move('down')
-                ge[i].fitness += 0.1
-            if output[2] > 0.5 and output[3] <= 0.0:
-                snake.move('right')
-                ge[i].fitness += 0.1
-            if output[3] > 0.5 and output[2] <= 0.0:
-                snake.move('left')
-                ge[i].fitness += 0.1
+            if output[0] > 0.5:
+                snake.move_left()
+            if output[1] > 0.5:
+                snake.move_right()
+
 
             if food_eaten(snake):
                 snake.grow()
@@ -237,7 +253,6 @@ def fitness(genomes, config):
                 snake.life += 100
 
             if snake.self_collision() or walls.collision(snake) or snake.life <= 0:
-                ge[i].fitness -= 5
                 snakes.pop(i)
                 ge.pop(i)
                 nets.pop(i)
